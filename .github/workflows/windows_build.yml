@@ -1,6 +1,16 @@
 name: Windows builds
 
-on: [push, pull_request]
+on:
+    push:
+    pull_request:
+    workflow_dispatch:
+        inputs:
+            PYTHON_VERSION:
+                description: "The version of python"
+                default: "3.7.9"
+            PLATFORM:
+                description: "The python architecure (x86 or x64)"
+                default: "x86"
 
 jobs:
 
@@ -35,6 +45,12 @@ jobs:
         PYTHON_VERSION: "3.7.9"
 
     steps:
+      - name: Use workflow_dispatch event inputs
+        if: github.event.inputs
+        shell: pwsh
+        run: |
+          echo "PYTHON_VERSION=${{ github.event.inputs.PYTHON_VERSION }}" >> ${env:GITHUB_ENV}
+          echo "platform=${{ github.event.inputs.PLATFORM }}" >> ${env:GITHUB_ENV}
 
       # To avoid git clone to mess with the line endings of GDAL autotest data
       # files that look like text, but should be handled as binary content
