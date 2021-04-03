@@ -7,10 +7,22 @@ on:
         inputs:
             PYTHON_VERSION:
                 description: "The version of python"
-                default: "3.7.9"
+                default: "3.9"
             PLATFORM:
                 description: "The python architecure (x86 or x64)"
-                default: "x86"
+                default: "x64"
+            SDK:
+                description: "The SDK version (release-1928 or release-1928-x64), see https://www.gisinternals.com/sdk.php"
+                default: "release-1928-x64"
+            LIBWEBP_FNAME:
+                description: "The WebP release (libwebp-1.0.3-windows-x86.zip or libwebp-1.0.3-windows-x64.zip), see https://developers.google.com/speed/webp/docs/precompiled"
+                default: "libwebp-1.0.3-windows-x64.zip"
+            LIBZSTD_FNAME:
+                description: "The Zstandard release (v1.4.5/zstd-v1.4.5-win32.zip or v1.4.5/zstd-v1.4.5-win64.zip), see https://github.com/facebook/zstd"
+                default: "v1.4.5/zstd-v1.4.5-win64.zip"
+            LIBDEFLATE_FNAME:
+                description: "The Deflate release (v1.6/libdeflate-1.6-windows-i686-bin.zip or v1.6/libdeflate-1.6-windows-x86_64-bin.zip), see https://github.com/ebiggers/libdeflate"
+                default: "v1.6/libdeflate-1.6-windows-x86_64-bin.zip"
 
 jobs:
 
@@ -50,7 +62,26 @@ jobs:
         shell: pwsh
         run: |
           echo "PYTHON_VERSION=${{ github.event.inputs.PYTHON_VERSION }}" >> ${env:GITHUB_ENV}
+          echo "PYTHON_VERSION set to ${{ github.event.inputs.PYTHON_VERSION }}"
           echo "platform=${{ github.event.inputs.PLATFORM }}" >> ${env:GITHUB_ENV}
+          echo "platform set to ${{ github.event.inputs.PLATFORM }}"
+          echo "SDK=${{ github.event.inputs.SDK }}" >> ${env:GITHUB_ENV}
+          echo "SDK set to ${{ github.event.inputs.SDK }}"
+          # WebP release
+          $url = Split-Path $env:LIBWEBP_URL
+          $url = $url.Replace('\','/') + "/${{ github.event.inputs.LIBWEBP_FNAME }}"
+          echo "LIBWEBP_URL=$url" >> ${env:GITHUB_ENV}
+          echo "LIBWEBP_URL set to $url"
+          # Zstandard release
+          $url = Split-Path $(Split-Path $env:LIBZSTD_URL)
+          $url = $url.Replace('\','/') + "/${{ github.event.inputs.LIBZSTD_FNAME }}"
+          echo "LIBZSTD_URL=$url" >> ${env:GITHUB_ENV}
+          echo "LIBZSTD_URL set to $url"
+          # Deflate release
+          $url = Split-Path $(Split-Path $env:LIBDEFLATE_URL)
+          $url = $url.Replace('\','/') + "/${{ github.event.inputs.LIBDEFLATE_FNAME }}"
+          echo "LIBDEFLATE_URL=$url" >> ${env:GITHUB_ENV}
+          echo "LIBDEFLATE_URL set to $url"
 
       # To avoid git clone to mess with the line endings of GDAL autotest data
       # files that look like text, but should be handled as binary content
@@ -173,7 +204,9 @@ jobs:
             $env:NMAKE_LOCAL+="POPPLER_MINOR_VERSION = 30`n"
             $env:NMAKE_LOCAL+="POPPLER_LIBS = `$(SDK_LIB)\poppler.lib `$(SDK_LIB)\freetype.lib `$(SDK_LIB)\harfbuzz.lib advapi32.lib gdi32.lib`n"
             $env:NMAKE_LOCAL+="OPENJPEG_ENABLED = YES`n"
-            $env:NMAKE_LOCAL+="OPENJPEG_CFLAGS = -I`$(SDK_INC)\openjpeg-2.1`n"
+            # Select the last OpenJPEG version (v2.X) from inside SDKs
+            $OPENJPEG_INC = $(Get-Item "${env:SDK_INC}\openjpeg-2.*")[-1].FullName
+            $env:NMAKE_LOCAL+="OPENJPEG_CFLAGS = -I$OPENJPEG_INC`n"
             $env:NMAKE_LOCAL+="OPENJPEG_LIB = `$(SDK_LIB)\openjp2.lib`n"
             $env:NMAKE_LOCAL+="ECWDIR=bla`n"
             $env:NMAKE_LOCAL+="ECWLIB=`$(SDK_LIB)\libecwj2.lib`n"
@@ -192,8 +225,10 @@ jobs:
             #$env:NMAKE_LOCAL+="ZSTD_CFLAGS = -I`$(SDK_PREFIX)\include`n"
             #$env:NMAKE_LOCAL+="ZSTD_LIBS = `$(SDK_PREFIX)\dll\libzstd.dll.a`n"
             $env:NMAKE_LOCAL+="WEBP_ENABLED=YES`n"
-            $env:NMAKE_LOCAL+="WEBP_CFLAGS = -I`$(SDK_PREFIX)\libwebp-1.0.3-windows-x86\include`n"
-            $env:NMAKE_LOCAL+="WEBP_LIBS = /NODEFAULTLIB:libcmt.lib `$(SDK_PREFIX)\libwebp-1.0.3-windows-x86\lib\libwebp.lib`n"
+            # The WebP files are under a folder with the same name as the ZIP
+            $LIBWEBP_FOLDER=[System.IO.Path]::GetFileNameWithoutExtension($env:LIBWEBP_URL)
+            $env:NMAKE_LOCAL+="WEBP_CFLAGS = -I`$(SDK_PREFIX)\$LIBWEBP_FOLDER\include`n"
+            $env:NMAKE_LOCAL+="WEBP_LIBS = /NODEFAULTLIB:libcmt.lib `$(SDK_PREFIX)\$LIBWEBP_FOLDER\lib\libwebp.lib`n"
             $env:NMAKE_LOCAL+="LIBDEFLATE_CFLAGS = -I`$(SDK_PREFIX)`n"
             $env:NMAKE_LOCAL+="LIBDEFLATE_LIB = `$(SDK_PREFIX)\libdeflate.lib`n"
             $env:NMAKE_LOCAL | Set-Content "$env:GITHUB_WORKSPACE\gdal\nmake.local"
