@@ -1,0 +1,94 @@
+name: Windows pip wheel build
+
+on:
+  workflow_dispatch:
+    inputs:
+      PYTHON_VERSION:
+          description: "The version of python"
+          default: "3.9"
+      PLATFORM:
+          description: "The python architecure (x86 or x64)"
+          default: "x64"
+      SDK_VER:
+          description: "The Development Kit version (1921, 1928, etc.), see https://www.gisinternals.com/sdk.php"
+          default: "1928"
+
+jobs:
+
+  windows_build:
+    runs-on: windows-latest
+
+    env:
+        PYTHON_VERSION: ${{ github.event.inputs.PYTHON_VERSION }}
+        PLATFORM: ${{ github.event.inputs.PLATFORM }}
+        SDK_VER: ${{ github.event.inputs.SDK_VER }}
+        SDK_URL_BASE: "http://download.gisinternals.com/sdk/downloads"
+
+    steps:
+
+      # To avoid git clone to mess with the line endings of GDAL autotest data
+      # files that look like text, but should be handled as binary content
+      - name: Set git core.autocrlf to false
+        run: |
+            git config --global core.autocrlf false
+
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: ${{ env.PLATFORM }}
+
+      - name: Development Kit ${{ env.SDK_VER }} - ${{ env.PLATFORM }}
+        shell: pwsh
+        run: |
+            $SDK_NAME = "release-$env:SDK_VER"
+            if ($env:PLATFORM -ne "x86") { $SDK_NAME += "-$env:PLATFORM"}
+            $SDK_URL = "$env:SDK_URL_BASE/$SDK_NAME-dev.zip"
+            echo "SDK_URL=$SDK_URL" >> $env:GITHUB_ENV
+            echo "SDK_URL set to $SDK_URL"
+
+            $SDK_BASE = "$env:GITHUB_WORKSPACE\SDK"
+            echo "SDK_BASE=$SDK_BASE" >> $env:GITHUB_ENV
+            echo "SDK_BASE set to $SDK_BASE"
+
+            $SDK_PREFIX = "$SDK_BASE\$SDK_NAME"
+            echo "SDK_PREFIX=$SDK_PREFIX" >> $env:GITHUB_ENV
+            echo "SDK_PREFIX set to $SDK_PREFIX"
+
+      - name: Download/prepare SDK from ${{ env.SDK_URL }}
+        shell: pwsh
+        run: |
+            Invoke-WebRequest $env:SDK_URL -OutFile SDK.zip
+            if (-not $?) { exit 255 }
+
+            Expand-Archive SDK.zip -DestinationPath $env:SDK_BASE
+            if (-not $?) { exit 255 }
+
+            $INCLUDE = "$env:SDK_PREFIX\include"
+            echo "INCLUDE=$INCLUDE" >> $env:GITHUB_ENV
+            echo "INCLUDE set to $INCLUDE"
+
+            $LIB = "$env:SDK_PREFIX\lib"
+            echo "LIB=$LIB" >> $env:GITHUB_ENV
+            echo "LIB set to $LIB"
+
+      - name: Build wheel
+        shell: pwsh
+        run: |
+            pip install numpy wheel
+
+            cd $env:GITHUB_WORKSPACE\gdal\swig\python
+            python setup.py bdist_wheel --dist-dir $env:GITHUB_WORKSPACE\wheel
+            if (-not $?) { exit 255 }
+
+            $ARTIFACT_NAME = $(Get-Item $env:GITHUB_WORKSPACE\wheel\*.whl)[0].Name
+            echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $env:GITHUB_ENV
+            echo "ARTIFACT_NAME set to $ARTIFACT_NAME"
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ./wheel/
