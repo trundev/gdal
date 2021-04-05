@@ -267,6 +267,25 @@ jobs:
             cd $env:GITHUB_WORKSPACE\autotest\cpp
             exec { nmake /f makefile.vc MSVC_VER=$env:MSVC_VER $env:WIN64_ARG }
 
+      # GDAL on Python 3.8 workaroud
+      # This may lead to the following problem:
+      # With USE_PATH_FOR_GDAL_PYTHON and python 3.8, "osgeo\__init__.py" pass all directories
+      # from PATH to os.add_dll_directory(), which fails if any of them is missing.
+      - name: Use USE_PATH_FOR_GDAL_PYTHON workaround
+        #if: ${{ env.PYTHON_VERSION }} >= 3.8
+        shell: pwsh
+        run: |
+            echo "USE_PATH_FOR_GDAL_PYTHON=YES" >> $env:GITHUB_ENV
+            # Just ensure the DLL folder under SDK exists
+            $env:PATH += ";$env:GITHUB_WORKSPACE\sdk\$env:SDK\dll"
+
+            foreach ($dir in $env:PATH.Split(";")) {
+              if ($dir -and !$(Test-Path $dir)) {
+                echo "Creating missing folder: $dir"
+                mkdir $dir
+              }
+            }
+
       - name: Run tests
         shell: pwsh
         run: |
