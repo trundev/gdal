@@ -75,11 +75,25 @@ jobs:
             echo "LIB=$LIB" >> $env:GITHUB_ENV
             echo "LIB set to $LIB"
 
-      - name: Build wheel
+      - name: Build everything needed to install
         shell: pwsh
         run: |
             pip install numpy wheel
+            cd $env:GITHUB_WORKSPACE\gdal\swig\python
+            python setup.py build
 
+      - name: Add the SDK DLLs
+        shell: pwsh
+        run: |
+            $build_dir = $(python -c "from distutils.command import build; from distutils.dist import Distribution; bld = build.build(Distribution()); bld.finalize_options(); print(bld.build_platlib)")
+            $build_dir = "$env:GITHUB_WORKSPACE\gdal\swig\python\$build_dir\osgeo"
+            $sdk_dlls = Join-Path "$env:SDK_PREFIX\bin" *.dll
+            echo "Copying $sdk_dlls to $build_dir..."
+            Copy-Item $sdk_dlls $build_dir
+
+      - name: Create a wheel distribution
+        shell: pwsh
+        run: |
             cd $env:GITHUB_WORKSPACE\gdal\swig\python
             python setup.py bdist_wheel --dist-dir $env:GITHUB_WORKSPACE\wheel
             if (-not $?) { exit 255 }
